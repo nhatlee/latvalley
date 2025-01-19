@@ -1,4 +1,6 @@
 import Vapor
+import Fluent
+import FluentPostgresDriver
 
 // configures your application
 public func configure(_ app: Application) async throws {
@@ -8,4 +10,17 @@ public func configure(_ app: Application) async throws {
     try routes(app)
     try app.register(collection: UserController())
     try app.register(collection: HTMLContentController())
+    
+    app.databases.use(
+        .postgres(
+            configuration: .init(
+                hostname: "localhost",
+                username: "latvalley",
+                password: "latvalley@2025",
+                database: "latvalley",
+                tls: .disable
+            )
+        ),
+        as: .psql
+    )
 }
