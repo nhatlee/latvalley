@@ -8,36 +8,38 @@ import Vapor
 
 struct UserController: RouteCollection {
     func boot(routes: RoutesBuilder) throws {
-        let user = routes.grouped("users")
-        user.post(use: create)
+        let user = routes.grouped("user")
+        user.post("create", use: createUser)
+
         user.post("login", use: login)
-//        user.group(":id") { user in
-//            user.post(use: login)
-//            user.post(use: delete)
-//        }
+
     }
     
-    func create(req: Request) async throws -> UserModel {
-        let user = try req.content.decode(UserModel.self)
-        return user
+    func createUser(req: Request) async throws -> UserModel {
+        do {
+            let user = try req.content.decode(UserModel.self)
+            req.logger.info("\(user)")
+            let eventLoop = user.create(on: req.db).map { user }
+            return try await eventLoop.get()
+        } catch {
+            req.logger.error("\(String(reflecting: error))")
+            throw Abort(.custom(code: 0, reasonPhrase: error.localizedDescription))
+        }
     }
     
     func login(req: Request) async throws -> UserModel {
         req.logger.info("\(req.description)")
-//        try UserModel.validate(query: req)
         guard let data = req.body.data else {
             throw Abort(.custom(code: 0, reasonPhrase: "User not found"))
         }
         do {
-            let json = try JSONDecoder().decode(UserModel.self, from: data)
-            return UserModel(
-                id: json.id,
-                name: json.name,
-                password: json.password,
-                email: json.email
-            )
+            let user = try JSONDecoder().decode(UserModel.self, from: data)
+            if let userModel = try await UserModel.query(on: req.db).all().first(where: { $0 == user }) {
+                return userModel
+            }
+            throw Abort(.custom(code: 403, reasonPhrase: "User name or password is incorrect"))
         } catch {
-            throw Abort(.badRequest)
+            throw Abort(.custom(code: 403, reasonPhrase: error.localizedDescription))
         }
     }
     
