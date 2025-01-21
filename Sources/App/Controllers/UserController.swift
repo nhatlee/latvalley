@@ -36,8 +36,9 @@ struct UserController: RouteCollection {
             let user = try JSONDecoder().decode(UserModel.self, from: data)
             if let userModel = try await UserModel.query(on: req.db).all().first(where: { $0 == user }) {
                 return userModel
+            } else {
+                throw Abort(.custom(code: 403, reasonPhrase: "Not found"))
             }
-            throw Abort(.custom(code: 403, reasonPhrase: "User name or password is incorrect"))
         } catch {
             throw Abort(.custom(code: 403, reasonPhrase: error.localizedDescription))
         }
