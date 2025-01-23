@@ -39,19 +39,25 @@ final class UserModel: Model, Content, Equatable {
     @Field(key: "email")
     var email: String
     
+    @Field(key: "user_token")
+    var token: String?
+    
     init() {}
     
     init(
         id: UUID? = UUID(),
         name: String,
         password: String,
-        email: String
+        email: String,
+        token: String? = nil
     ) {
         self.id = id
         self.name = name
         self.password = password
         self.email = email
+        self.token = token
     }
+    
     
     func encodeResponse(for request: Vapor.Request) async throws -> Vapor.Response {
         let data = try JSONEncoder().encode(self)
