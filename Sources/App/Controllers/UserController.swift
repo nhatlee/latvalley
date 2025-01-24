@@ -12,21 +12,60 @@ struct UserController: RouteCollection {
         let user = routes.grouped("user")
         user.post("create", use: createUser)
         user.post("login", use: login)
-//        user.get("token", use: generateToken)
+        user.delete("delete", use: deleteUser)
     }
     
-    // This use to generart
-//    func generateToken(req: Request) async throws -> [String: String] {
-//        let payload = UserPayload(
-//            subject: "LatValleyToken",
-//            expiration: .init(value: .distantFuture),
-//            isAdmin: true
-//        )
-//        let keyCollection = await JWTKeyCollection()
-//                    .add(hmac: "TODO LatValley secret keys here", digestAlgorithm: .sha256)
-//        let token = try await keyCollection.sign(payload)
-//        return ["LatValleyToken": token]
-//    }
+    func createUser(req: Request) async throws -> UserModel {
+        do {
+            let user = try req.content.decode(UserModel.self)
+            req.logger.info("\(user)")
+            let eventLoop = user.create(on: req.db).map { user }
+            return try await eventLoop.get()
+        } catch {
+            req.logger.error("\(String(reflecting: error))")
+            throw Abort(.custom(code: 0, reasonPhrase: error.localizedDescription))
+        }
+    }
+    
+    func login(req: Request) async throws -> UserModel {
+        req.logger.info("\(req.description)")
+        guard let data = req.body.data else {
+            throw Abort(.custom(code: 0, reasonPhrase: "Invalid request body"))
+        }
+        do {
+            let user = try JSONDecoder().decode(UserModel.self, from: data)
+            req.logger.info("User decode from request: \(user.description)")
+            if var userModel = try await UserModel.query(on: req.db).all().first(where: { $0 == user }) {
+                let payload = UserPayload(
+                    subject: SubjectClaim(value: "LatValley-\(user.id!)"),
+                    issuer: IssuerClaim(value: user.email),
+                    expiration: .init(value: .distantFuture),
+                    role: .admin
+                )
+                // Generate new token every time login request
+                let token = try await generateUserToken(payload)
+                user.token = token
+                return user
+            } else {
+                throw Abort(.custom(code: 0, reasonPhrase: "User not found"))
+            }
+        } catch {
+            throw Abort(.custom(code: 0, reasonPhrase: error.localizedDescription))
+        }
+    }
+    
+    func deleteUser(req: Request) async throws -> HTTPStatus {
+        req.logger.info("\(req.description)")
+        guard let data = req.body.data else {
+            throw Abort(.custom(code: 0, reasonPhrase: "Invalid request body"))
+        }
+        let user = try JSONDecoder().decode(UserModel.self, from: data)
+        if var userModel = try await UserModel.query(on: req.db).all().first(where: { $0 == user }) {
+            try await userModel.delete(on: req.db)
+            return .ok
+        }
+        throw Abort(.custom(code: 0, reasonPhrase: "User not found to delete"))
+    }
     
     private func generateUserToken(
         _ payload: JWTPayload,
@@ -56,54 +95,4 @@ struct UserController: RouteCollection {
             header: header
         )
     }
-    
-    func createUser(req: Request) async throws -> UserModel {
-        do {
-            let user = try req.content.decode(UserModel.self)
-            req.logger.info("\(user)")
-            let eventLoop = user.create(on: req.db).map { user }
-            return try await eventLoop.get()
-        } catch {
-            req.logger.error("\(String(reflecting: error))")
-            throw Abort(.custom(code: 0, reasonPhrase: error.localizedDescription))
-        }
-    }
-    
-    func login(req: Request) async throws -> UserModel {
-        req.logger.info("\(req.description)")
-        guard let data = req.body.data else {
-            throw Abort(.custom(code: 0, reasonPhrase: "Invalid request body"))
-        }
-        do {
-            let user = try JSONDecoder().decode(UserModel.self, from: data)
-            req.logger.info("User decode from request: \(user.description)")
-            if var userModel = try await UserModel.query(on: req.db).all().first(where: { $0 == user }) {
-                let payload = UserPayload(
-                    subject: "LatValley",
-                    expiration: .init(value: .distantFuture),
-                    isAdmin: true
-                )
-                // Generate new token every time login request
-                let token = try await generateUserToken(payload)
-                user.token = token
-                return user
-            } else {
-                throw Abort(.custom(code: 0, reasonPhrase: "User not found"))
-            }
-        } catch {
-            throw Abort(.custom(code: 0, reasonPhrase: error.localizedDescription))
-        }
-    }
-    
-    func delete(req: Request) async throws -> HTTPStatus {
-        //TODO
-        /*
-         guard let todo = try await Todo.find(req.parameters.get("id"), on: req.db) else {
-                     throw Abort(.notFound)
-                 }
-                 try await todo.delete(on: req.db)
-         */
-        return .ok
-    }
-    
 }
