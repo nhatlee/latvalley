@@ -2,6 +2,10 @@ import Vapor
 
 /// Test commit from company laptop
 func routes(_ app: Application) throws {
+    app.get("photos") { req -> EventLoopFuture<[PhotoModel]> in
+        let response = req.client.get(URI(string: "https://jsonplaceholder.typicode.com/photos"))
+        return response.flatMapThrowing { try $0.content.decode([PhotoModel].self) }
+    }
     
     app.get("number", ":x") { req -> String in
         guard let int = req.parameters.get("x", as: Int.self) else {
